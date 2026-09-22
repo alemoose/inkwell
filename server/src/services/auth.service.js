@@ -12,6 +12,9 @@ class WeakPasswordError extends Error {}
 class InvalidCredentialsError extends Error {}
 
 const MIN_PASSWORD_LENGTH = 8;
+function toPublicUser({ passwordHash, ...publicUser }) {
+  return publicUser;
+}
 
 export const AuthService = {
   async register({ email, displayName, password }) {
@@ -40,7 +43,7 @@ export const AuthService = {
     }
 
     const tokens = TokenService.issueTokens(user);
-    return { user, ...tokens };
+    return { user: toPublicUser(user), ...tokens };
   },
 
   async login({ email, password }) {
@@ -55,7 +58,7 @@ export const AuthService = {
     }
 
     const tokens = TokenService.issueTokens(user);
-    return { user, ...tokens };
+    return { user: toPublicUser(user), ...tokens };
   },
 };
 
