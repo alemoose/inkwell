@@ -9,12 +9,55 @@ export const PostRepository = {
     });
   },
 
+  // Creates the post and links its tags in one call. connectOrCreate
+  // reuses an existing Tag row if the name already exists, otherwise
+  // makes a new one, so tag names stay unique.
+  createWithTags({ authorId, title, body, tagNames = [], status, publishedAt }) {
+    const names = [...new Set(tagNames.map((n) => String(n).trim()).filter(Boolean))];
+
+    return prisma.post.create({
+      data: {
+        authorId,
+        title,
+        body,
+        status,
+        publishedAt,
+        tags: {
+          create: names.map((name) => ({
+            tag: { connectOrCreate: { where: { name }, create: { name } } },
+          })),
+        },
+      },
+      include: { tags: { include: { tag: true } } },
+    });
+  },
+
   async findPublished({ page, pageSize }) {
     const rows = await prisma.post.findMany({
       where: { status: "PUBLISHED" },
       orderBy: { publishedAt: "desc" },
       skip: (page - 1) * pageSize,
       take: pageSize + 1, // fetch one extra row to compute hasMore
+    });
+    const hasMore = rows.length > pageSize;
+    return { posts: rows.slice(0, pageSize), hasMore };
+  },
+
+  async searchPublished({ query, page, pageSize }) {
+    const where = {
+      status: "PUBLISHED",
+      OR: [
+        { title: { contains: query, mode: "insensitive" } },
+        { body: { contains: query, mode: "insensitive" } },
+        { tags: { some: { tag: { name: { equals: query, mode: "insensitive" } } } } },
+      ],
+    };
+    const rows = await prisma.post.findMany({
+      where,
+      orderBy: { publishedAt: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize + 1,
+      include: { author: { select: { id: true, displayName: true } } },
     });
     const hasMore = rows.length > pageSize;
     return { posts: rows.slice(0, pageSize), hasMore };
