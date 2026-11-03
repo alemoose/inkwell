@@ -6,6 +6,7 @@ import bcrypt from "bcrypt";
 import { UserRepository } from "../repositories/user.repository.js";
 import { assertNonEmpty, ValidationError } from "../utils/validation.js";
 import { TokenService } from "./token.service.js";
+import { logger } from "../lib/logger.js";
 
 class EmailAlreadyRegisteredError extends Error {}
 class WeakPasswordError extends Error {}
@@ -47,14 +48,14 @@ export const AuthService = {
     return { user: toPublicUser(user), ...tokens };
   },
 
-  async login({ email, password }) {
+    async login({ email, password }) {
     const user = await UserRepository.findByEmail(email);
-    if (!user) {
-      throw new InvalidCredentialsError();
-    }
-
-    const matches = await bcrypt.compare(password, user.passwordHash);
+    const matches = user ? await bcrypt.compare(password, user.passwordHash) : false;
     if (!matches) {
+      // A09's fix (Lecture 16): a failed login is now a recorded,
+      // structured event, searchable by "event" or "email", not a silent
+      // failure only the requester ever sees. The password is never logged.
+      logger.warn({ event: "auth.login.failed", email }, "Failed login attempt");
       throw new InvalidCredentialsError();
     }
 

@@ -70,4 +70,14 @@ export const PostRepository = {
       hasMore,
     };
   },
+  
+  findById(id) {
+    return prisma.post.findUnique({ where: { id } });
+  },
+
+  // PostTag rows are removed by the database's ON DELETE CASCADE
+  // (schema.prisma, Lecture 16), so a tagged post deletes cleanly.
+  deleteById(id) {
+    return prisma.post.delete({ where: { id } });
+  },
 };
