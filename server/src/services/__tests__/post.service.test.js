@@ -2,7 +2,7 @@
 
 import { jest } from "@jest/globals";
 
-const mockPostRepository = { createWithTags: jest.fn(), searchPublished: jest.fn() };
+const mockPostRepository = { createWithTags: jest.fn(), searchPublished: jest.fn(), findPublished: jest.fn() };
 const mockEventBus = { emit: jest.fn() };
 
 jest.unstable_mockModule("../../repositories/post.repository.js", () => ({
@@ -12,7 +12,7 @@ jest.unstable_mockModule("../../events/event-bus.js", () => ({
   EventBus: mockEventBus,
 }));
 
-const { PostService } = await import("../post.service.js");
+const { PostService, MAX_PAGE_SIZE } = await import("../post.service.js");
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -86,5 +86,35 @@ describe("PostService.search", () => {
       pageSize: 10,
     });
     expect(result.hasMore).toBe(true);
+  });
+});
+
+
+// Exercise 1 (Lecture 15): Denial of Service mitigation on GET /api/posts
+describe("pageSize limit", () => {
+  test("listPublished() clamps an oversized pageSize to MAX_PAGE_SIZE", async () => {
+    mockPostRepository.findPublished.mockResolvedValue({ posts: [], hasMore: false });
+
+    await PostService.listPublished({ page: 1, pageSize: 1000000 });
+
+    expect(mockPostRepository.findPublished).toHaveBeenCalledWith({ page: 1, pageSize: MAX_PAGE_SIZE });
+  });
+
+  test("listPublished() falls back to the default for a negative or non-numeric pageSize", async () => {
+    mockPostRepository.findPublished.mockResolvedValue({ posts: [], hasMore: false });
+
+    await PostService.listPublished({ page: 1, pageSize: -5 });
+    await PostService.listPublished({ page: 1, pageSize: "abc" });
+
+    expect(mockPostRepository.findPublished).toHaveBeenNthCalledWith(1, { page: 1, pageSize: 10 });
+    expect(mockPostRepository.findPublished).toHaveBeenNthCalledWith(2, { page: 1, pageSize: 10 });
+  });
+
+  test("search() clamps an oversized pageSize too", async () => {
+    mockPostRepository.searchPublished.mockResolvedValue({ posts: [], hasMore: false });
+
+    await PostService.search({ query: "hello", page: 1, pageSize: 1000000 });
+
+    expect(mockPostRepository.searchPublished).toHaveBeenCalledWith({ query: "hello", page: 1, pageSize: MAX_PAGE_SIZE });
   });
 });

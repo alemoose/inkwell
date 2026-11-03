@@ -7,6 +7,19 @@ import { EventBus } from "../events/event-bus.js";
 
 const searchStrategy = SubstringSearchStrategy; // swap this line to change search behavior system-wide
 
+// Exercise 1 (Lecture 15): Denial of Service mitigation on GET /api/posts.
+// A client can't ask for a huge page (e.g. ?pageSize=1000000) and force
+// one giant query. Oversized or invalid values are clamped, not rejected,
+// so the feed still works.
+export const DEFAULT_PAGE_SIZE = 10;
+export const MAX_PAGE_SIZE = 50;
+
+export function clampPageSize(pageSize) {
+  const n = Math.floor(Number(pageSize));
+  if (!Number.isFinite(n) || n < 1) return DEFAULT_PAGE_SIZE;
+  return Math.min(n, MAX_PAGE_SIZE);
+}
+
 export const PostService = {
   async publish({ authorId, title, body, tagNames = [] }) {
     assertNonEmpty(title, "title", "MISSING_TITLE");
@@ -31,12 +44,15 @@ export const PostService = {
     return post;
   },
 
-  async listPublished({ page = 1, pageSize = 10 }) {
-    const { posts, hasMore } = await PostRepository.findPublished({ page, pageSize });
+  async listPublished({ page = 1, pageSize = DEFAULT_PAGE_SIZE }) {
+    const { posts, hasMore } = await PostRepository.findPublished({
+      page,
+      pageSize: clampPageSize(pageSize),
+    });
     return { posts, page, hasMore };
   },
 
-  async search({ query, page = 1, pageSize = 10 }) {
-    return searchStrategy.search(query, { page, pageSize });
+  async search({ query, page = 1, pageSize = DEFAULT_PAGE_SIZE }) {
+    return searchStrategy.search(query, { page, pageSize: clampPageSize(pageSize) });
   },
 };

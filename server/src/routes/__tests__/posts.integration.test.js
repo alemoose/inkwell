@@ -7,8 +7,7 @@
 import request from "supertest";
 import { app } from "../../app.js";
 import { prisma } from "../../db/client.js";
-import { resetDatabase } from "../../test-utils/fixtures.js";
-
+import { resetDatabase, createTestUser } from "../../test-utils/fixtures.js";
 beforeEach(async () => {
   await resetDatabase();
 });
@@ -57,4 +56,26 @@ test("registering with a duplicate email fails end to end (US-01 extension 3a, v
 
   expect(secondAttempt.status).toBe(400);
   expect(secondAttempt.body.error.code).toBe("EMAIL_ALREADY_REGISTERED");
+});
+
+
+// Exercise 1 (Lecture 15): an oversized pageSize request is clamped end
+// to end, through the real route, service, repository, and database.
+test("GET /api/posts clamps an oversized pageSize to 50 (DoS mitigation)", async () => {
+  const author = await createTestUser();
+  await prisma.post.createMany({
+    data: Array.from({ length: 51 }, (_, i) => ({
+      authorId: author.id,
+      title: `Post ${i + 1}`,
+      body: "Body text.",
+      status: "PUBLISHED",
+      publishedAt: new Date(),
+    })),
+  });
+
+  const res = await request(app).get("/api/posts?page=1&pageSize=1000000");
+
+  expect(res.status).toBe(200);
+  expect(res.body.posts).toHaveLength(50); // clamped, not 51
+  expect(res.body.hasMore).toBe(true);
 });

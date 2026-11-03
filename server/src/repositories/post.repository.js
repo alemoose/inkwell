@@ -1,6 +1,7 @@
 // server/src/repositories/post.repository.js
 
 import { prisma } from "../db/client.js";
+import { toPublicUser } from "../dto/user.dto.js";
 
 export const PostRepository = {
   create({ authorId, title, body, status, publishedAt }) {
@@ -35,12 +36,16 @@ export const PostRepository = {
   async findPublished({ page, pageSize }) {
     const rows = await prisma.post.findMany({
       where: { status: "PUBLISHED" },
+      include: { author: true },
       orderBy: { publishedAt: "desc" },
       skip: (page - 1) * pageSize,
       take: pageSize + 1, // fetch one extra row to compute hasMore
     });
     const hasMore = rows.length > pageSize;
-    return { posts: rows.slice(0, pageSize), hasMore };
+    return {
+      posts: rows.slice(0, pageSize).map((post) => ({ ...post, author: toPublicUser(post.author) })),
+      hasMore,
+    };
   },
 
   async searchPublished({ query, page, pageSize }) {
@@ -57,9 +62,12 @@ export const PostRepository = {
       orderBy: { publishedAt: "desc" },
       skip: (page - 1) * pageSize,
       take: pageSize + 1,
-      include: { author: { select: { id: true, displayName: true } } },
+      include: { author: true },
     });
     const hasMore = rows.length > pageSize;
-    return { posts: rows.slice(0, pageSize), hasMore };
+    return {
+      posts: rows.slice(0, pageSize).map((post) => ({ ...post, author: toPublicUser(post.author) })),
+      hasMore,
+    };
   },
 };

@@ -3,36 +3,21 @@
 // Wires PostService to POST /api/posts and GET /api/posts.
 // Lecture 9: GET /api/posts takes an optional ?search= instead of a
 // separate /api/search endpoint (consistency, Lecture 7).
+// Lecture 15: POST /api/posts requires a valid token, and the author is
+// always taken from that token, never from the request body.
 
 import { Router } from "express";
 import { PostService } from "../services/post.service.js";
-import { TokenService } from "../services/token.service.js";
+import { requireAuth } from "../middleware/auth.middleware.js";
 
 const router = Router();
 
-// Prefer the logged-in user from the Bearer token; fall back to
-// authorId in the body so earlier lectures' requests still work.
-function resolveAuthorId(req) {
-  const header = req.headers.authorization || "";
-  if (header.startsWith("Bearer ")) {
-    return TokenService.verifyAccessToken(header.slice(7)).sub;
-  }
-  return req.body.authorId;
-}
-
-router.post("/posts", async (req, res) => {
-  let authorId;
-  try {
-    authorId = resolveAuthorId(req);
-  } catch {
-    return res.status(401).json({
-      error: { code: "INVALID_TOKEN", message: "Access token is invalid or expired." },
-    });
-  }
-
+router.post("/posts", requireAuth, async (req, res) => {
   try {
     const { title, body, tagNames = [] } = req.body;
-    const post = await PostService.publish({ authorId, title, body, tagNames });
+    // Never trust client-supplied identity fields. Any authorId in the
+    // body is ignored; req.user is set by requireAuth from the verified JWT.
+    const post = await PostService.publish({ authorId: req.user.id, title, body, tagNames });
     res.status(201).json(post);
   } catch (err) {
     res.status(400).json({
@@ -44,10 +29,10 @@ router.post("/posts", async (req, res) => {
 router.get("/posts", async (req, res, next) => {
   try {
     const page = Number(req.query.page) || 1;
-    const { search } = req.query;
+    const { search, pageSize } = req.query; // pageSize is clamped in PostService
     const result = search
-      ? await PostService.search({ query: search, page })
-      : await PostService.listPublished({ page });
+      ? await PostService.search({ query: search, page, pageSize })
+      : await PostService.listPublished({ page, pageSize });
     res.status(200).json(result);
   } catch (err) {
     next(err);
